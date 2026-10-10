@@ -37,10 +37,6 @@ http://38.75.136.137:98/gslb/dsdqpub/ystq.m3u8?auth=testpub
 http://38.75.136.137:98/gslb/dsdqpub/ysjp.m3u8?auth=testpub
 #EXTINF:-1 tvg-id="AndoTV.cn@SD" tvg-name="Ando TV" tvg-logo="https://i.imgur.com/EpTsFVu.png" group-title="📡 地方频道",Ando TV
 http://play.kankanlive.com/live/1711956137852982.m3u8
-#EXTINF:-1 tvg-id="TVBRICSChinese.cn@SD" tvg-name="TV BRICS Chinese" tvg-logo="https://i.imgur.com/896132Z.png" group-title="📡 地方频道",TV BRICS Chinese
-https://chibrics.mediacdn.ru/cdn/brics/chinese/playlist.m3u8
-#EXTINF:-1 tvg-id="VoATVChina.cn@SD" tvg-name="VOA美国之音" tvg-logo="https://i.imgur.com/XCTZkoq.png" group-title="📡 地方频道",VOA美国之音
-https://voa-ingest.akamaized.net/hls/live/2033878/tvmc08/playlist.m3u8
 #EXTINF:-1 tvg-id="AnhuiTV.cn@SD" tvg-name="安徽卫视" tvg-logo="https://i.imgur.com/gDn101f.png" group-title="📡 地方频道",安徽卫视
 https://restream.pdtvhd.com/memfs/c1cd2ed0-3b2b-4c25-af98-a7fb0b1eb130.m3u8
 #EXTINF:-1 tvg-id="HebeiTV.cn@SD" tvg-name="河北电视台" tvg-logo="https://i.imgur.com/Z5Ppzbi.png" group-title="📡 地方频道",河北电视台
@@ -53,12 +49,12 @@ https://5ddce30eb4b55.streamlock.net/bltvhd/bltv1/playlist.m3u8
 https://d3e05csss9c272.cloudfront.net/out/v1/f0bf71c57581470fb9379f603e8f5d83/CGNWebLiveCN.m3u8
 #EXTINF:-1 tvg-id="DaliTV.tw@SD" tvg-name="Dali TV" tvg-logo="https://i.imgur.com/pFIMLsA.png" group-title="🌏 港澳台",Dali TV
 http://www.dalitv.com.tw:4568/live/dali/index.m3u8
+#EXTINF:-1 tvg-id="GoodTV.tw@SD" tvg-name="Good TV (Taiwan)" tvg-logo="https://i.imgur.com/k28Kc3o.png" group-title="🌏 港澳台",Good TV (Taiwan)
+https://live.streamingfast.net/osmflivech1.m3u8
 #EXTINF:-1 tvg-id="LotusTV.mo@SD" tvg-name="Lotus TV" tvg-logo="https://i.imgur.com/7j8Lnog.png" group-title="🌏 港澳台",Lotus TV
 https://cdn4.skygo.mn/live/disk1/Lotus/HLSv3-FTA/Lotus.m3u8
 #EXTINF:-1 tvg-id="PetClubTV.hk@SD" tvg-name="Pet Club TV" tvg-logo="https://i.imgur.com/ykPNNwQ.png" group-title="🌏 港澳台",Pet Club TV
 https://petclub-samsungaus.amagi.tv/playlist.m3u8
-#EXTINF:-1 tvg-id="SupremeMasterTV.tw@SD" tvg-name="Supreme Master TV" tvg-logo="https://i.imgur.com/kFMHayP.png" group-title="🌏 港澳台",Supreme Master TV
-https://lbs-us1.suprememastertv.com/720p.m3u8
 #EXTINF:-1 tvg-id="TVBSAsia.tw@SD" tvg-name="TVBS-Asia" tvg-logo="https://i.imgur.com/4S1rkhm.png" group-title="🌏 港澳台",TVBS-Asia
 http://38.64.72.148/hls/modn/list/4005/playlist.m3u8
 #EXTINF:-1 tvg-id="Jade.hk@SD" tvg-name="TVB翡翠台" tvg-logo="https://raw.githubusercontent.com/wanglindl/TVlogo/main/img/TVB1.png" group-title="🌏 港澳台",TVB翡翠台
@@ -69,6 +65,8 @@ https://streamipcfapp.akamaized.net/live/_definst_/live_720/key_b1500.m3u8
 https://mobile.ccdntech.com/transcoder/_definst_/vod164_Live/live/chunklist_w1177047531.m3u8
 #EXTINF:-1 tvg-id="AsianDrama.hk@SD" tvg-name="亞洲劇台" tvg-logo="https://i.imgur.com/wqtN7mH.png" group-title="🌏 港澳台",亞洲劇台
 http://103.172.187.30:12000/stream/mytv/null-11/master.m3u8
+#EXTINF:-1 tvg-id="Good2.tw@SD" tvg-name="好消息電視台" tvg-logo="https://i.imgur.com/YxFRoft.png" group-title="🌏 港澳台",好消息電視台
+https://live.streamingfast.net/osmflivech2.m3u8
 #EXTINF:-1 tvg-id="RTHKTV31.hk@SD" tvg-name="港台電視31" tvg-logo="https://i.imgur.com/kf818kM.png" group-title="🌏 港澳台",港台電視31
 https://rthktv31-live.akamaized.net/hls/live/2036818/RTHKTV31/master.m3u8
 #EXTINF:-1 tvg-id="MeiAhMovieChannel.hk@SD" tvg-name="美亞電影台" tvg-logo="https://i.imgur.com/laGiFM1.png" group-title="🌏 港澳台",美亞電影台
