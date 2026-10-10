@@ -61,6 +61,21 @@ CCTV_NAMES = {
     "4K": "超高清", "8K": "超高清",
 }
 
+# 只要这些地区自己的电视台（iptv-org 的频道编号结尾就是地区代码，比如 HunanTV.cn）
+ALLOWED_COUNTRIES = {"cn", "hk", "mo", "tw"}
+
+# 英文省份名 → 中文，用来把 “Hunan TV” 这类英文名换成 “湖南卫视”
+PROVINCES = {
+    "Anhui": "安徽", "Beijing": "北京", "Chongqing": "重庆", "Dongnan": "东南", "Fujian": "福建",
+    "Gansu": "甘肃", "Guangdong": "广东", "Guangxi": "广西", "Guizhou": "贵州", "Hainan": "海南",
+    "Hebei": "河北", "Heilongjiang": "黑龙江", "Henan": "河南", "Hubei": "湖北", "Hunan": "湖南",
+    "Jiangsu": "江苏", "Jiangxi": "江西", "Jilin": "吉林", "Liaoning": "辽宁", "Neimenggu": "内蒙古",
+    "Inner Mongolia": "内蒙古", "Ningxia": "宁夏", "Qinghai": "青海", "Shaanxi": "陕西",
+    "Shandong": "山东", "Shanghai": "上海", "Dragon": "东方", "Shanxi": "山西", "Shenzhen": "深圳",
+    "Sichuan": "四川", "Tianjin": "天津", "Xinjiang": "新疆", "Xizang": "西藏", "Tibet": "西藏",
+    "Yunnan": "云南", "Zhejiang": "浙江",
+}
+
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 
 
@@ -143,7 +158,11 @@ def clean_name(raw_name, tvg_id, cn_names):
         return f"CCTV-{key} {CCTV_NAMES.get(key, '')}".strip()
     cn = cn_names.get(tvg_id.split("@")[0])
     if cn:
-        return cn
+        return re.sub(r"^CCTV-央视", "央视", cn)
+    # 省级卫视的英文名，比如 “Hunan TV”“Beijing Satellite TV HD” → “湖南卫视”“北京卫视”
+    m = re.match(r"\s*([A-Za-z ]+?)\s+(?:Satellite\s+)?TV\b(?:\s+HD)?\s*(\(|\[|$)", raw_name)
+    if m and m.group(1) in PROVINCES:
+        return PROVINCES[m.group(1)] + "卫视"
     # 没有中文名：去掉 (1080p)、[Not 24/7]、HD 这类后缀
     name = re.sub(r"\(\d{3,4}p\)|\[[^\]]*\]|\bHD\b|\bSD\b", "", raw_name)
     return re.sub(r"\s+", " ", name).strip()
@@ -243,14 +262,19 @@ def main():
             except Exception as e:
                 print(f"下载失败 {src}: {e}", file=sys.stderr)
                 continue
-            # 记下来源自带的节目单地址
+            # 记下来源自带的节目单地址，以及写在文件开头、对整个文件生效的回看设置
             header = text.lstrip().split("\n", 1)[0]
+            file_catchup = {k: attr(header, k) for k in CATCHUP_KEYS if attr(header, k)}
             for epg in re.findall(r'(?:x-tvg-url|url-tvg)="([^"]+)"', header):
                 for u in epg.split(","):
                     if u.strip() and u.strip() not in epg_urls:
                         epg_urls.append(u.strip())
             for info, url in items:
                 if url in seen:
+                    continue
+                # 去掉外地电视台（比如编号是 .us 结尾的美国之音）
+                cc = attr(info, "tvg-id").split("@")[0].rsplit(".", 1)
+                if len(cc) == 2 and cc[1].lower() not in ALLOWED_COUNTRIES:
                     continue
                 seen.add(url)
                 raw_name = info.rsplit(",", 1)[-1].strip()
@@ -260,7 +284,7 @@ def main():
                     "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
                     "logo": attr(info, "tvg-logo"),
                     "tvg_id": attr(info, "tvg-id"),
-                    "catchup": {k: attr(info, k) for k in CATCHUP_KEYS if attr(info, k)},
+                    "catchup": {k: attr(info, k) for k in CATCHUP_KEYS if attr(info, k)} or file_catchup,
                     "url": url,
                     "height": name_height(raw_name),
                     "v6": is_ipv6(url),
