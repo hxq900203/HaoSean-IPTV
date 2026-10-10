@@ -62,3 +62,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
+
+  # ------------------------------------------------------------
+  # 发布到短链接：https://hxq900203.github.io/HaoSean-IPTV/haosean.m3u
+  # （需要在仓库 Settings → Pages 里把 Source 设成 GitHub Actions，只设一次）
+  # ------------------------------------------------------------
+  pages:
+    needs: update # 等上面更新完再发布
+    runs-on: ubuntu-latest
+    continue-on-error: true # 还没开启 Pages 时这一步会失败，但不影响直播源更新
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      # 拿到刚更新好的最新文件
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # 只发布播放列表和统计，不发布程序
+      - name: 准备要发布的文件
+        run: mkdir site && cp haosean.m3u all.m3u stats.md site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - uses: actions/deploy-pages@v4

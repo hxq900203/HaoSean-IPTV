@@ -9,7 +9,7 @@ https://cdn.jsdelivr.net/gh/hxq900203/HaoSean-IPTV@main/haosean.m3u
 
 **🌍 国外链接（国内链接打不开时，开 VPN 用这个）**
 ```
-https://raw.githubusercontent.com/hxq900203/HaoSean-IPTV/main/haosean.m3u
+https://hxq900203.github.io/HaoSean-IPTV/haosean.m3u
 ```
 
 > 当前有多少频道能看、最后更新时间，见 [stats.md](stats.md)
