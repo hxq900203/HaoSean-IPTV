@@ -40,6 +40,7 @@ https://raw.githubusercontent.com/hxq900203/HaoSean-IPTV/main/haosean.m3u
 - ✅ 频道名统一成中文，比如「CCTV-1 综合」「北京卫视」
 - ✅ 同名频道只留一个，优先保留画质最好的
 - ✅ 去掉境外机构办的华语台
+- ✅ 网友整理源只收电视台官方网站的地址，不要来路不明的服务器和付费频道
 
 ---
 
@@ -81,6 +82,6 @@ APTV / TiviMate 会缓存列表。先在 App 里手动「刷新播放列表」�
 
 <div align="center">
 
-<sub>频道来源：<a href="https://github.com/iptv-org/iptv">iptv-org</a> 公开免费源 · 程序 <code>fetch.py</code> 每一步都有中文解释</sub>
+<sub>频道来源：<a href="https://github.com/iptv-org/iptv">iptv-org</a>，以及网友整理源里的电视台官方直播地址 · 程序 <code>fetch.py</code> 每一步都有中文解释</sub>
 
 </div>

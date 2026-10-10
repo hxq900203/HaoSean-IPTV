@@ -2,7 +2,7 @@
 # Hao Sean 的专属直播源：自动抓取程序
 #
 # 这个程序做四件事：
-#   1. 下载公开免费的国内、港澳台电视频道列表
+#   1. 下载公开免费的国内、港澳台电视频道列表（iptv-org + 网友整理源里的电视台官方地址）
 #   2. 整理频道：换成中文名、分成「央视 / 地方 / 港澳台」、只留 1080P 以上的国内频道
 #   3. 一个个试播，看哪些现在能看
 #   4. 生成播放列表 haosean.m3u（只要 IPv4 的频道）
@@ -34,6 +34,21 @@ SOURCES = {
     "大陆": [f"{BASE}/countries/cn.m3u"],
     "港澳台": [f"{BASE}/countries/hk.m3u", f"{BASE}/countries/mo.m3u", f"{BASE}/countries/tw.m3u"],
 }
+
+# 网友整理的源：里面混着各种来路的地址，只收电视台官方的（规则见下面 OFFICIAL_HOSTS）
+COMMUNITY_SOURCES = [
+    "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u",
+    "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/ipv4/result.m3u",
+]
+
+# 电视台官方网站：地址是 .cn 结尾，或者是下面这几家（都是省市电视台自己的网站）。
+# 一串数字（IP）开头的地址、来路不明的转播网站都不要。
+OFFICIAL_HOSTS = ["cztv.com", "cztvcloud.com", "gztv.com", "ynurl.com", "hrbtv.net"]
+# 虽然是 .cn 结尾、但属于付费平台的网站，不要
+PAID_HOSTS = ["bestv.cn"]
+
+# 网友源里这些分组不要（付费频道、广播、春晚回放、风景直播等）
+SKIP_GROUPS = ["付费", "更新时间", "春晚", "直播中国", "音乐", "解说", "广播"]
 
 # iptv-org 的频道资料库，用来把英文频道名换成中文名
 CHANNELS_DB = "https://iptv-org.github.io/api/channels.json"
@@ -167,6 +182,21 @@ def clean_name(raw_name, tvg_id, cn_names):
     return re.sub(r"\s+", " ", name).strip()
 
 
+def is_official(url):
+    """网友源里的地址，是不是电视台官方网站的。"""
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    try:
+        ipaddress.ip_address(host)
+        return False  # 一串数字开头的地址，不要
+    except ValueError:
+        pass
+    def match(h):
+        return host == h or host.endswith("." + h)
+    if any(match(h) for h in PAID_HOSTS):
+        return False
+    return host.endswith(".cn") or any(match(h) for h in OFFICIAL_HOSTS)
+
+
 def is_ipv6(url):
     """判断播放地址是不是 IPv6：地址里直接写着 IPv6 号码，或者这个网站只有 IPv6。"""
     host = urllib.parse.urlsplit(url).hostname or ""
@@ -253,44 +283,49 @@ def main():
 
     # 下载并整理所有频道
     channels, seen, epg_urls = [], set(), []
-    for region, urls in SOURCES.items():
-        for src in urls:
-            try:
-                text = download(src)
-                items = parse_m3u(text)
-            except Exception as e:
-                print(f"下载失败 {src}: {e}", file=sys.stderr)
+    all_sources = [(region, src) for region, urls in SOURCES.items() for src in urls]
+    all_sources += [("大陆", src) for src in COMMUNITY_SOURCES]
+    for region, src in all_sources:
+        try:
+            text = download(src)
+            items = parse_m3u(text)
+        except Exception as e:
+            print(f"下载失败 {src}: {e}", file=sys.stderr)
+            continue
+        # 记下来源自带的节目单地址，以及写在文件开头、对整个文件生效的回看设置
+        header = text.lstrip().split("\n", 1)[0]
+        file_catchup = {k: attr(header, k) for k in CATCHUP_KEYS if attr(header, k)}
+        for epg in re.findall(r'(?:x-tvg-url|url-tvg)="([^"]+)"', header):
+            for u in epg.split(","):
+                if u.strip() and u.strip() not in epg_urls:
+                    epg_urls.append(u.strip())
+        community = src in COMMUNITY_SOURCES
+        for info, url in items:
+            if url in seen:
                 continue
-            # 记下来源自带的节目单地址，以及写在文件开头、对整个文件生效的回看设置
-            header = text.lstrip().split("\n", 1)[0]
-            file_catchup = {k: attr(header, k) for k in CATCHUP_KEYS if attr(header, k)}
-            for epg in re.findall(r'(?:x-tvg-url|url-tvg)="([^"]+)"', header):
-                for u in epg.split(","):
-                    if u.strip() and u.strip() not in epg_urls:
-                        epg_urls.append(u.strip())
-            for info, url in items:
-                if url in seen:
-                    continue
-                # 去掉外地电视台（编号结尾不是 .cn .hk .mo .tw 的）
-                cc = attr(info, "tvg-id").split("@")[0].rsplit(".", 1)
-                if len(cc) == 2 and cc[1].lower() not in ALLOWED_COUNTRIES:
-                    continue
-                seen.add(url)
-                raw_name = info.rsplit(",", 1)[-1].strip()
-                # 只看频道名和编号，不看台标网址（网址里的乱码可能碰巧含有这些字母）
-                if any(w.lower() in (raw_name + attr(info, "tvg-id")).lower() for w in EXCLUDE):
-                    continue
-                is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV|中国教育)", raw_name, re.I)
-                channels.append({
-                    "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
-                    "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
-                    "logo": attr(info, "tvg-logo"),
-                    "tvg_id": attr(info, "tvg-id"),
-                    "catchup": {k: attr(info, k) for k in CATCHUP_KEYS if attr(info, k)} or file_catchup,
-                    "url": url,
-                    "height": name_height(raw_name),
-                    "v6": is_ipv6(url),
-                })
+            # 网友源：只收电视台官方地址，跳过不要的分组
+            if community and (not is_official(url) or any(w in attr(info, "group-title") for w in SKIP_GROUPS)):
+                continue
+            # 去掉外地电视台（编号结尾不是 .cn .hk .mo .tw 的）
+            cc = attr(info, "tvg-id").split("@")[0].rsplit(".", 1)
+            if len(cc) == 2 and cc[1].lower() not in ALLOWED_COUNTRIES:
+                continue
+            seen.add(url)
+            raw_name = info.rsplit(",", 1)[-1].strip()
+            # 只看频道名和编号，不看台标网址（网址里的乱码可能碰巧含有这些字母）
+            if any(w.lower() in (raw_name + attr(info, "tvg-id")).lower() for w in EXCLUDE):
+                continue
+            is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV|中国教育)", raw_name, re.I)
+            channels.append({
+                "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
+                "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
+                "logo": attr(info, "tvg-logo"),
+                "tvg_id": attr(info, "tvg-id"),
+                "catchup": {k: attr(info, k) for k in CATCHUP_KEYS if attr(info, k)} or file_catchup,
+                "url": url,
+                "height": name_height(raw_name),
+                "v6": is_ipv6(url),
+            })
 
     # 保险 1：一个频道都没下载到（多半是网络问题），保留上次的结果
     if not channels:
