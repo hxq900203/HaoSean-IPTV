@@ -17,14 +17,14 @@
 | 网络 | 链接 |
 | :-: | :-- |
 | 🇨🇳 国内 | `https://cdn.jsdelivr.net/gh/hxq900203/HaoSean-IPTV@main/haosean.m3u` |
-| 🌍 VPN | `https://hxq900203.github.io/HaoSean-IPTV/haosean.m3u` |
+| 🌍 VPN | `https://raw.githubusercontent.com/hxq900203/HaoSean-IPTV/main/haosean.m3u` |
 
 ### 🔵 IPv6（家里宽带支持 IPv6 时用，回看更多）
 
 | 网络 | 链接 |
 | :-: | :-- |
 | 🇨🇳 国内 | `https://cdn.jsdelivr.net/gh/hxq900203/HaoSean-IPTV@main/haosean-ipv6.m3u` |
-| 🌍 VPN | `https://hxq900203.github.io/HaoSean-IPTV/haosean-ipv6.m3u` |
+| 🌍 VPN | `https://raw.githubusercontent.com/hxq900203/HaoSean-IPTV/main/haosean-ipv6.m3u` |
 
 > 💡 **不知道用哪个？** 先用 IPv4。手机浏览器打开 [test-ipv6.com](https://test-ipv6.com)，显示支持 IPv6 的话，可以再加一份 IPv6。
 >
