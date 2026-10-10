@@ -1,18 +1,23 @@
 # ============================================================
-# 电视直播源自动抓取程序
+# Hao Sean 的专属直播源：自动抓取程序
 #
-# 这个程序做三件事：
-#   1. 从 iptv-org（一个整理全球公开免费电视源的项目）下载频道列表
-#   2. 一个个试播，看哪些频道现在能看
-#   3. 把能看的频道整理成播放列表文件（.m3u），手机 App 直接就能用
+# 这个程序做四件事：
+#   1. 下载公开免费的国内、港澳台电视频道列表
+#   2. 整理频道：换成中文名、分成「央视 / 地方 / 港澳台」、只留 1080P 以上的国内频道
+#   3. 一个个试播，看哪些现在能看
+#   4. 生成两份播放列表：IPv4 一份、IPv6 一份，互不混合
 #
 # 你不需要自己运行它，GitHub 每天会自动运行。
 # 只用到 Python 自带的功能，不需要额外安装任何东西。
 # ============================================================
 
+import ipaddress
+import json
 import re
+import socket
 import sys
 import time
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -23,32 +28,47 @@ from datetime import datetime, timedelta, timezone
 
 BASE = "https://iptv-org.github.io/iptv"
 
-# 要抓哪些频道：左边是在 App 里显示的分组名，右边是频道列表的下载地址。
-# 想加别的国家，照着格式加一行就行，比如日本是 countries/jp.m3u
+# 频道来源：左边是地区，右边是下载地址
 SOURCES = {
-    "中国大陆": [f"{BASE}/countries/cn.m3u"],
+    "大陆": [
+        f"{BASE}/countries/cn.m3u",
+        # 社区整理的 IPv6 国内频道（iptv-org 里没有 IPv6 的源）
+        "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
+    ],
     "港澳台": [f"{BASE}/countries/hk.m3u", f"{BASE}/countries/mo.m3u", f"{BASE}/countries/tw.m3u"],
-    "国际新闻": [f"{BASE}/categories/news.m3u"],
 }
 
-# 国内频道没测通时，不直接删掉，而是放进这个分组。
-# 原因：检测是在 GitHub 的海外服务器上做的，有些频道只允许国内访问，
-# 在海外测不通，但你在国内其实能看。
-BACKUP_GROUP = "中国大陆（备用）"
+# iptv-org 的频道资料库，用来把英文频道名换成中文名
+CHANNELS_DB = "https://iptv-org.github.io/api/channels.json"
 
-TIMEOUT = 8  # 试播一个频道最多等几秒，超过就算不能看
-WORKERS = 64  # 同时试播多少个频道（数字越大检测越快）
+MIN_HEIGHT = 1080  # 国内频道最低分辨率（1080 就是 1080P）
+TIMEOUT = 8  # 试播一个频道最多等几秒
+WORKERS = 64  # 同时试播多少个频道
 
-# 假装自己是普通浏览器，有些频道会拒绝不像浏览器的访问
+# App 里显示的分组名（前面的小图标让列表更好看）
+G_CCTV = "📺 央视频道"
+G_LOCAL = "📡 地方频道"
+G_HMT = "🌏 港澳台"
+G_BACKUP = "🔸 国内备用"  # 海外没测通、但国内可能能看的频道
+GROUP_ORDER = [G_CCTV, G_LOCAL, G_HMT, G_BACKUP]
+
+# 央视频道的中文名
+CCTV_NAMES = {
+    "1": "综合", "2": "财经", "3": "综艺", "4": "中文国际", "5": "体育", "5+": "体育赛事",
+    "6": "电影", "7": "国防军事", "8": "电视剧", "9": "纪录", "10": "科教", "11": "戏曲",
+    "12": "社会与法", "13": "新闻", "14": "少儿", "15": "音乐", "16": "奥林匹克", "17": "农业农村",
+    "4K": "超高清", "8K": "超高清",
+}
+
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 
 
 # ------------------------------------------------------------
-# 【第 1 步】下载频道列表
+# 【第 1 步】下载
 # ------------------------------------------------------------
 
 def download(url):
-    """下载一个网址的内容。失败会自动重试 3 次，避免网络偶尔抽风。"""
+    """下载一个网址的内容。失败会自动重试 3 次。"""
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -57,19 +77,12 @@ def download(url):
         except Exception:
             if attempt == 2:
                 raise
-            time.sleep(5)  # 等 5 秒再试
+            time.sleep(5)
 
 
 def parse_m3u(text):
-    """读懂播放列表文件。
-
-    .m3u 文件里，每个频道占两行：
-        #EXTINF:-1 group-title="分组",频道名   <- 频道信息
-        http://xxx/xxx.m3u8                     <- 播放地址
-    这里把它们配成一对一对的：[(频道信息, 播放地址), ...]
-    """
-    channels = []
-    info = None
+    """读懂播放列表：每个频道是「#EXTINF 信息行 + 播放地址」两行，配成一对一对的。"""
+    channels, info = [], None
     for line in text.splitlines():
         line = line.strip()
         if line.startswith("#EXTINF"):
@@ -80,115 +93,206 @@ def parse_m3u(text):
     return channels
 
 
-def set_group(info, group):
-    """把频道原来的分组名换成我们自己的（比如“中国大陆”），App 里看着更整齐。"""
-    if 'group-title="' in info:
-        return re.sub(r'group-title="[^"]*"', f'group-title="{group}"', info)
-    return info.replace("#EXTINF:-1", f'#EXTINF:-1 group-title="{group}"', 1)
-
-
-def channel_name(info):
-    """从频道信息里取出频道名（逗号后面那部分）。"""
-    return info.rsplit(",", 1)[-1].strip()
+def load_chinese_names():
+    """从 iptv-org 频道资料库里，找出每个频道的中文名。下载失败就用英文名。"""
+    try:
+        db = json.loads(download(CHANNELS_DB))
+    except Exception as e:
+        print(f"频道资料库下载失败，使用英文名：{e}", file=sys.stderr)
+        return {}
+    names = {}
+    for ch in db:
+        for alt in ch.get("alt_names") or []:
+            if re.search(r"[一-鿿]", alt):  # 含有汉字的就是中文名
+                names[ch["id"]] = alt
+                break
+    return names
 
 
 # ------------------------------------------------------------
-# 【第 2 步】试播，检测频道能不能看
+# 【第 2 步】整理频道
 # ------------------------------------------------------------
 
-def is_alive(url):
-    """打开播放地址，读一小段内容。能正常读到就算这个频道能看。"""
+def attr(info, key):
+    """从信息行里取出某一项，比如 tvg-logo（台标）。"""
+    m = re.search(rf'{key}="([^"]*)"', info)
+    return m.group(1) if m else ""
+
+
+def name_height(raw_name):
+    """从频道名里读出分辨率，比如 “(1080p)” 就是 1080。4K/8K 算 2160。没写就返回 0。"""
+    m = re.search(r"\((\d{3,4})p\)", raw_name)
+    if m:
+        return int(m.group(1))
+    if re.search(r"\b[48]K\b", raw_name, re.I):
+        return 2160
+    return 0
+
+
+def cctv_key(raw_name):
+    """如果是央视频道，返回台号（比如 “1”、“5+”、“4K”），不是就返回 None。"""
+    m = re.match(r"\s*CCTV[-\s]?(\d{1,2}\+?|[48]K)(?![\d])", raw_name, re.I)
+    return m.group(1).upper() if m else None
+
+
+def clean_name(raw_name, tvg_id, cn_names):
+    """把频道名整理干净、换成中文。"""
+    key = cctv_key(raw_name)
+    if key:
+        return f"CCTV-{key} {CCTV_NAMES.get(key, '')}".strip()
+    cn = cn_names.get(tvg_id.split("@")[0])
+    if cn:
+        return cn
+    # 没有中文名：去掉 (1080p)、[Not 24/7]、HD 这类后缀
+    name = re.sub(r"\(\d{3,4}p\)|\[[^\]]*\]|\bHD\b|\bSD\b", "", raw_name)
+    return re.sub(r"\s+", " ", name).strip()
+
+
+def is_ipv6(url):
+    """判断播放地址是不是 IPv6：地址里直接写着 IPv6 号码，或者这个网站只有 IPv6。"""
+    host = urllib.parse.urlsplit(url).hostname or ""
+    try:
+        return ipaddress.ip_address(host).version == 6
+    except ValueError:
+        pass
+    try:
+        socket.getaddrinfo(host, None, socket.AF_INET)
+        return False  # 有 IPv4 地址
+    except OSError:
+        try:
+            socket.getaddrinfo(host, None, socket.AF_INET6)
+            return True  # 只有 IPv6 地址
+        except OSError:
+            return False
+
+
+# ------------------------------------------------------------
+# 【第 3 步】试播
+# ------------------------------------------------------------
+
+def probe(url):
+    """打开播放地址试一下。返回（能不能看，实际分辨率）。读不出分辨率时分辨率为 0。"""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             if resp.status != 200:
-                return False
-            head = resp.read(2048)
-            # .m3u8 格式的地址，正常的话开头会有 #EXTM3U 字样
-            if ".m3u8" in url.lower():
-                return b"#EXTM3U" in head
-            return len(head) > 0
+                return False, 0
+            head = resp.read(16384)
     except Exception:
-        return False
+        return False, 0
+    if ".m3u8" in url.lower() and b"#EXTM3U" not in head:
+        return False, 0
+    heights = [int(h) for h in re.findall(rb"RESOLUTION=\d+x(\d+)", head)]
+    return len(head) > 0, max(heights, default=0)
 
 
 # ------------------------------------------------------------
-# 【第 3 步】排序并保存成文件
+# 【第 4 步】排序、保存
 # ------------------------------------------------------------
 
-def sort_key(item):
-    """排序规则：按分组 → 央视（按 CCTV-1、2、3 顺序）→ 卫视 → 其他按名字。"""
-    group, info, _ = item
-    name = channel_name(info)
-    rank = 0 if name.upper().startswith("CCTV") else 1 if "卫视" in name else 2
-    num = re.search(r"\d+", name)
-    return (list(SOURCES).index(group), rank, int(num.group()) if num and rank == 0 else 0, name)
+def sort_key(ch):
+    """排序：按分组 → 央视按台号 1、2、3… → 其他按名字。"""
+    m = re.match(r"CCTV-(\d+)", ch["name"])
+    num = int(m.group(1)) if m else 999
+    return (GROUP_ORDER.index(ch["group"]), num, ch["name"])
 
 
-def write_m3u(path, items):
-    """把频道写进 .m3u 播放列表文件。"""
+def dedupe(channels):
+    """同一个分组里同名的频道只留一个（分辨率高的优先）。"""
+    best = {}
+    for ch in sorted(channels, key=lambda c: -c["height"]):
+        best.setdefault((ch["group"], ch["name"]), ch)
+    return sorted(best.values(), key=sort_key)
+
+
+def write_m3u(path, channels):
     with open(path, "w", encoding="utf-8") as f:
         f.write("#EXTM3U\n")
-        for _, info, url in items:
-            f.write(f"{info}\n{url}\n")
+        for ch in channels:
+            logo = f' tvg-logo="{ch["logo"]}"' if ch["logo"] else ""
+            f.write(f'#EXTINF:-1 tvg-name="{ch["name"]}"{logo} group-title="{ch["group"]}",{ch["name"]}\n')
+            f.write(f'{ch["url"]}\n')
 
 
 # ------------------------------------------------------------
-# 【主流程】把上面三步串起来
+# 【主流程】
 # ------------------------------------------------------------
 
 def main():
-    # 下载所有分组的频道，同一个播放地址只留一个（去重）
-    items, seen = [], set()
-    for group, urls in SOURCES.items():
+    cn_names = load_chinese_names()
+
+    # 下载并整理所有频道
+    channels, seen = [], set()
+    for region, urls in SOURCES.items():
         for src in urls:
             try:
-                channels = parse_m3u(download(src))
+                items = parse_m3u(download(src))
             except Exception as e:
                 print(f"下载失败 {src}: {e}", file=sys.stderr)
                 continue
-            for info, url in channels:
-                if url not in seen:
-                    seen.add(url)
-                    items.append((group, set_group(info, group), url))
+            for info, url in items:
+                if url in seen:
+                    continue
+                seen.add(url)
+                raw_name = info.rsplit(",", 1)[-1].strip()
+                is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV)", raw_name, re.I)
+                channels.append({
+                    "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
+                    "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
+                    "logo": attr(info, "tvg-logo"),
+                    "url": url,
+                    "height": name_height(raw_name),
+                    "v6": is_ipv6(url),
+                })
 
-    # 保险 1：一个频道都没下载到（多半是网络问题），就不动旧文件，保留上次能用的列表
-    if not items:
+    # 保险 1：一个频道都没下载到（多半是网络问题），保留上次的结果
+    if not channels:
         sys.exit("一个频道都没抓到，保留上次的结果")
 
-    # 同时试播所有频道
-    print(f"共抓到 {len(items)} 个频道，开始检测…")
+    v4 = [c for c in channels if not c["v6"]]
+    v6 = [c for c in channels if c["v6"]]
+
+    # 试播 IPv4 频道（GitHub 的服务器不支持 IPv6，IPv6 频道没法试播）
+    print(f"IPv4 {len(v4)} 个、IPv6 {len(v6)} 个频道，开始检测 IPv4…")
     with ThreadPoolExecutor(WORKERS) as pool:
-        alive = list(pool.map(lambda it: is_alive(it[2]), items))
+        results = list(pool.map(lambda c: probe(c["url"]), v4))
+    for ch, (ok, height) in zip(v4, results):
+        ch["ok"] = ok
+        ch["height"] = ch["height"] or height  # 频道名里没写分辨率，就用试播读到的
 
-    zip_alive = list(zip(items, alive))
-    alive_items = sorted((it for it, ok in zip_alive if ok), key=sort_key)
-    items.sort(key=sort_key)
+    def hd_enough(ch):
+        """国内频道只要 1080P 以上；港澳台不限。"""
+        return ch["group"] == G_HMT or ch["height"] >= MIN_HEIGHT
 
-    # 保险 2：全部频道都测不通（多半是检测时网络出了问题），同样保留上次的结果
-    if not alive_items:
-        sys.exit("所有频道都检测失败，保留上次的结果")
+    # IPv4：能看的 + 国内没测通的放进「国内备用」
+    alive = dedupe([c for c in v4 if c["ok"] and hd_enough(c)])
+    alive_names = {c["name"] for c in alive}
+    backup = [dict(c, group=G_BACKUP) for c in v4
+              if not c["ok"] and c["group"] != G_HMT and hd_enough(c) and c["name"] not in alive_names]
+    list_v4 = alive + dedupe(backup)
 
-    # 中国大陆没测通的频道，改到“备用”分组，排在播放列表最后
-    backup_items = sorted(
-        ((g, set_group(info, BACKUP_GROUP), url) for (g, info, url), ok in zip_alive if not ok and g == "中国大陆"),
-        key=sort_key,
-    )
+    # IPv6：没法试播，频道名里写了低于 1080P 的去掉，其余都保留
+    list_v6 = dedupe([c for c in v6 if c["group"] == G_HMT or not 0 < c["height"] < MIN_HEIGHT])
 
-    write_m3u("all.m3u", items)  # 全部频道
-    write_m3u("haosean.m3u", alive_items + backup_items)  # Hao Sean 的专属列表：能看的频道 + 国内备用
+    # 保险 2：IPv4 一个能看的都没有（多半是检测时网络出问题），保留上次的结果
+    if not alive:
+        sys.exit("IPv4 频道全部检测失败，保留上次的结果")
 
-    # 生成统计表：每个分组能看几个、什么时候更新的
+    write_m3u("haosean.m3u", list_v4)
+    if list_v6:  # IPv6 源下载失败时不覆盖上次的 IPv6 列表
+        write_m3u("haosean-ipv6.m3u", list_v6)
+
+    # 生成统计表
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
-    lines = [f"更新时间：{now}（北京时间）", "", "| 分组 | 可用 / 总数 |", "| :-- | :-- |"]
-    for group in SOURCES:
-        total = sum(1 for it in items if it[0] == group)
-        ok = sum(1 for it in alive_items if it[0] == group)
-        lines.append(f"| {group} | {ok} / {total} |")
-    lines.append(f"| {BACKUP_GROUP} | {len(backup_items)}（海外没测通，国内可能能看） |")
+    rows = [f"更新时间：**{now}**（北京时间）", "", "| 分组 | IPv4 | IPv6 |", "| :-- | :-: | :-: |"]
+    for g in GROUP_ORDER:
+        n4 = sum(1 for c in list_v4 if c["group"] == g)
+        n6 = sum(1 for c in list_v6 if c["group"] == g)
+        rows.append(f"| {g} | {n4} | {n6 if g != G_BACKUP else '—'} |")
+    rows.append(f"| **合计** | **{len(list_v4)}** | **{len(list_v6)}** |")
     with open("stats.md", "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    print("\n".join(lines))
+        f.write("\n".join(rows) + "\n")
+    print("\n".join(rows))
 
 
 if __name__ == "__main__":
