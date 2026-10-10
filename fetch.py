@@ -64,6 +64,9 @@ CCTV_NAMES = {
 # 只要这些地区自己的电视台（iptv-org 的频道编号结尾就是地区代码，比如 HunanTV.cn）
 ALLOWED_COUNTRIES = {"cn", "hk", "mo", "tw"}
 
+# 不要的台：频道名里含有这些字就去掉（主要是境外机构办的、只是面向华语观众播出的台）
+EXCLUDE = ["VOA", "美国之音", "BRICS", "Supreme Master", "NTD", "新唐人", "希望之声", "Epoch", "大纪元"]
+
 # 英文省份名 → 中文，用来把 “Hunan TV” 这类英文名换成 “湖南卫视”
 PROVINCES = {
     "Anhui": "安徽", "Beijing": "北京", "Chongqing": "重庆", "Dongnan": "东南", "Fujian": "福建",
@@ -276,9 +279,11 @@ def main():
                 cc = attr(info, "tvg-id").split("@")[0].rsplit(".", 1)
                 if len(cc) == 2 and cc[1].lower() not in ALLOWED_COUNTRIES:
                     continue
+                if any(w.lower() in info.lower() for w in EXCLUDE):
+                    continue
                 seen.add(url)
                 raw_name = info.rsplit(",", 1)[-1].strip()
-                is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV)", raw_name, re.I)
+                is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV|中国教育)", raw_name, re.I)
                 channels.append({
                     "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
                     "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
