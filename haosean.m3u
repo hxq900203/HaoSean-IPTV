@@ -1,4 +1,4 @@
-#EXTM3U
+#EXTM3U x-tvg-url="http://epg.51zmt.top:8000/e.xml,https://gh-proxy.com/https://raw.githubusercontent.com/Guovin/iptv-api/refs/heads/master/output/epg/epg.gz"
 #EXTINF:-1 tvg-id="CCTV6.cn@HD" tvg-name="CCTV6" tvg-logo="https://i.imgur.com/rFiaef7.png" group-title="📺 央视频道",CCTV-6 电影
 http://69.30.245.50/live/cctv6.m3u8
 #EXTINF:-1 tvg-id="CCTV8K.cn@HD" tvg-name="CCTV8" tvg-logo="https://i.imgur.com/fxVPMJF.png" group-title="📺 央视频道",CCTV-8 电视剧
@@ -39,6 +39,8 @@ http://38.75.136.137:98/gslb/dsdqpub/ysjp.m3u8?auth=testpub
 http://play.kankanlive.com/live/1711956137852982.m3u8
 #EXTINF:-1 tvg-id="AnhuiTV.cn@SD" tvg-name="安徽卫视" tvg-logo="https://i.imgur.com/gDn101f.png" group-title="📡 地方频道",安徽卫视
 https://restream.pdtvhd.com/memfs/c1cd2ed0-3b2b-4c25-af98-a7fb0b1eb130.m3u8
+#EXTINF:-1 tvg-id="广西国际" tvg-name="广西国际" tvg-logo="https://tb.zbds.top/logo/广西国际.png" group-title="📡 地方频道",广西国际
+https://hlscdn.liangtv.cn/live/0234c48e0bc24fe1b41b9999a253e581/1075ee38e04f490690f6a36a16e09c79.m3u8
 #EXTINF:-1 tvg-id="HebeiTV.cn@SD" tvg-name="河北电视台" tvg-logo="https://i.imgur.com/Z5Ppzbi.png" group-title="📡 地方频道",河北电视台
 https://event.pull.hebtv.com/live/live101.m3u8
 #EXTINF:-1 tvg-id="HunanTV.cn@SD" tvg-name="湖南卫视" tvg-logo="https://parco-zh.github.io/demo/HNWS.png" group-title="📡 地方频道",湖南卫视
