@@ -40,36 +40,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
-          git add haosean*.m3u stats.md
+          git add -A haosean*.m3u stats.md
           git diff --cached --quiet || git commit -m "更新直播源 $(date -u +%F)"
           git push
 
-      # 5. 让国内加速地址马上拿到新列表：
-      #    jsDelivr（国内能打开的加速地址）会缓存旧文件，这里通知它清掉缓存。
-      #    仓库是私有的时候这一步会失败，但不影响其他步骤。
-      - name: 刷新国内加速地址
-        continue-on-error: true
-        run: |
-          for f in haosean.m3u haosean-ipv6.m3u; do
-            curl -fsS -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$f" || true
-          done
-
-      # 6. 检查国内加速地址拿到的是不是新列表（结果在运行记录里能看到）
-      - name: 检查国内加速地址
-        continue-on-error: true
-        run: |
-          sleep 20
-          for f in haosean.m3u haosean-ipv6.m3u; do
-            url="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$f"
-            if curl -fsS -m 30 "$url" | grep -q "📺 央视频道"; then
-              echo "✅ $f 国内地址已是新版"
-            else
-              echo "⚠️ $f 国内地址还是旧版或打不开：$url"
-              curl -sS -m 30 "$url" | head -3
-            fi
-          done
-
-      # 7. 保活：GitHub 规定仓库 60 天没动静就会停掉定时任务。
+      # 5. 保活：GitHub 规定仓库 60 天没动静就会停掉定时任务。
       #    这里每次运行都“重新启用”一下自己，60 天的计时就重新开始，能一直跑下去。
       #    就算上面某一步失败了，这一步也照样执行。
       - name: 保活

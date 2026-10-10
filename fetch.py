@@ -5,7 +5,7 @@
 #   1. 下载公开免费的国内、港澳台电视频道列表
 #   2. 整理频道：换成中文名、分成「央视 / 地方 / 港澳台」、只留 1080P 以上的国内频道
 #   3. 一个个试播，看哪些现在能看
-#   4. 生成两份播放列表：IPv4 一份、IPv6 一份，互不混合
+#   4. 生成播放列表 haosean.m3u（只要 IPv4 的频道）
 #   5. 保留「回看」和「节目单」信息：来源支持回看的频道，在 App 里就能看之前播过的节目
 #
 # 你不需要自己运行它，GitHub 每天会自动运行。
@@ -31,11 +31,7 @@ BASE = "https://iptv-org.github.io/iptv"
 
 # 频道来源：左边是地区，右边是下载地址
 SOURCES = {
-    "大陆": [
-        f"{BASE}/countries/cn.m3u",
-        # 社区整理的 IPv6 国内频道（iptv-org 里没有 IPv6 的源）
-        "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
-    ],
+    "大陆": [f"{BASE}/countries/cn.m3u"],
     "港澳台": [f"{BASE}/countries/hk.m3u", f"{BASE}/countries/mo.m3u", f"{BASE}/countries/tw.m3u"],
 }
 
@@ -300,11 +296,10 @@ def main():
     if not channels:
         sys.exit("一个频道都没抓到，保留上次的结果")
 
+    # 只要 IPv4 的频道
     v4 = [c for c in channels if not c["v6"]]
-    v6 = [c for c in channels if c["v6"]]
 
-    # 试播 IPv4 频道（GitHub 的服务器不支持 IPv6，IPv6 频道没法试播）
-    print(f"IPv4 {len(v4)} 个、IPv6 {len(v6)} 个频道，开始检测 IPv4…")
+    print(f"共 {len(v4)} 个频道，开始检测…")
     with ThreadPoolExecutor(WORKERS) as pool:
         results = list(pool.map(lambda c: probe(c["url"]), v4))
     for ch, (ok, height) in zip(v4, results):
@@ -322,28 +317,18 @@ def main():
               if not c["ok"] and c["group"] != G_HMT and hd_enough(c) and c["name"] not in alive_names]
     list_v4 = alive + dedupe(backup)
 
-    # IPv6：没法试播，频道名里写了低于 1080P 的去掉，其余都保留
-    list_v6 = dedupe([c for c in v6 if c["group"] == G_HMT or not 0 < c["height"] < MIN_HEIGHT])
-
     # 保险 2：IPv4 一个能看的都没有（多半是检测时网络出问题），保留上次的结果
     if not alive:
         sys.exit("IPv4 频道全部检测失败，保留上次的结果")
 
     write_m3u("haosean.m3u", list_v4, epg_urls)
-    if list_v6:  # IPv6 源下载失败时不覆盖上次的 IPv6 列表
-        write_m3u("haosean-ipv6.m3u", list_v6, epg_urls)
 
     # 生成统计表
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
-    rows = [f"更新时间：**{now}**（北京时间）", "", "| 分组 | IPv4 | IPv6 |", "| :-- | :-: | :-: |"]
+    rows = [f"更新时间：**{now}**（北京时间）", "", "| 分组 | 频道数 |", "| :-- | :-: |"]
     for g in GROUP_ORDER:
-        n4 = sum(1 for c in list_v4 if c["group"] == g)
-        n6 = sum(1 for c in list_v6 if c["group"] == g)
-        rows.append(f"| {g} | {n4} | {n6 if g != G_BACKUP else '—'} |")
-    rows.append(f"| **合计** | **{len(list_v4)}** | **{len(list_v6)}** |")
-    n4 = sum(1 for c in list_v4 if c["catchup"])
-    n6 = sum(1 for c in list_v6 if c["catchup"])
-    rows.append(f"| ⏪ 支持回看 | {n4} | {n6} |")
+        rows.append(f"| {g} | {sum(1 for c in list_v4 if c['group'] == g)} |")
+    rows.append(f"| **合计** | **{len(list_v4)}** |")
     with open("stats.md", "w", encoding="utf-8") as f:
         f.write("\n".join(rows) + "\n")
     print("\n".join(rows))
