@@ -6,6 +6,7 @@
 #   2. 整理频道：换成中文名、分成「央视 / 地方 / 港澳台」、只留 1080P 以上的国内频道
 #   3. 一个个试播，看哪些现在能看
 #   4. 生成两份播放列表：IPv4 一份、IPv6 一份，互不混合
+#   5. 保留「回看」和「节目单」信息：来源支持回看的频道，在 App 里就能看之前播过的节目
 #
 # 你不需要自己运行它，GitHub 每天会自动运行。
 # 只用到 Python 自带的功能，不需要额外安装任何东西。
@@ -198,19 +199,30 @@ def sort_key(ch):
 
 
 def dedupe(channels):
-    """同一个分组里同名的频道只留一个（分辨率高的优先）。"""
+    """同一个分组里同名的频道只留一个（分辨率高的优先，一样高就优先留支持回看的）。"""
     best = {}
-    for ch in sorted(channels, key=lambda c: -c["height"]):
+    for ch in sorted(channels, key=lambda c: (-c["height"], not c["catchup"])):
         best.setdefault((ch["group"], ch["name"]), ch)
     return sorted(best.values(), key=sort_key)
 
 
-def write_m3u(path, channels):
+# 回看相关的设置项：来源里有就原样保留
+CATCHUP_KEYS = ("catchup", "catchup-source", "catchup-days")
+
+
+def write_m3u(path, channels, epg_urls):
     with open(path, "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
+        # 文件开头写上节目单地址，App 会自动加载节目单（回看要靠它选节目）
+        epg = f' x-tvg-url="{",".join(epg_urls)}"' if epg_urls else ""
+        f.write(f"#EXTM3U{epg}\n")
         for ch in channels:
             logo = f' tvg-logo="{ch["logo"]}"' if ch["logo"] else ""
-            f.write(f'#EXTINF:-1 tvg-name="{ch["name"]}"{logo} group-title="{ch["group"]}",{ch["name"]}\n')
+            tid = f' tvg-id="{ch["tvg_id"]}"' if ch["tvg_id"] else ""
+            catchup = "".join(f' {k}="{v}"' for k, v in ch["catchup"].items())
+            # 节目单按 “CCTV1” 这种写法对频道，所以央视的 tvg-name 用这种写法，显示的名字不变
+            m = re.match(r"CCTV-(\S+)", ch["name"])
+            tvg_name = f"CCTV{m.group(1)}" if m else ch["name"]
+            f.write(f'#EXTINF:-1{tid} tvg-name="{tvg_name}"{logo}{catchup} group-title="{ch["group"]}",{ch["name"]}\n')
             f.write(f'{ch["url"]}\n')
 
 
@@ -222,14 +234,21 @@ def main():
     cn_names = load_chinese_names()
 
     # 下载并整理所有频道
-    channels, seen = [], set()
+    channels, seen, epg_urls = [], set(), []
     for region, urls in SOURCES.items():
         for src in urls:
             try:
-                items = parse_m3u(download(src))
+                text = download(src)
+                items = parse_m3u(text)
             except Exception as e:
                 print(f"下载失败 {src}: {e}", file=sys.stderr)
                 continue
+            # 记下来源自带的节目单地址
+            header = text.lstrip().split("\n", 1)[0]
+            for epg in re.findall(r'(?:x-tvg-url|url-tvg)="([^"]+)"', header):
+                for u in epg.split(","):
+                    if u.strip() and u.strip() not in epg_urls:
+                        epg_urls.append(u.strip())
             for info, url in items:
                 if url in seen:
                     continue
@@ -240,6 +259,8 @@ def main():
                     "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
                     "group": G_HMT if region == "港澳台" else G_CCTV if is_cctv else G_LOCAL,
                     "logo": attr(info, "tvg-logo"),
+                    "tvg_id": attr(info, "tvg-id"),
+                    "catchup": {k: attr(info, k) for k in CATCHUP_KEYS if attr(info, k)},
                     "url": url,
                     "height": name_height(raw_name),
                     "v6": is_ipv6(url),
@@ -278,9 +299,9 @@ def main():
     if not alive:
         sys.exit("IPv4 频道全部检测失败，保留上次的结果")
 
-    write_m3u("haosean.m3u", list_v4)
+    write_m3u("haosean.m3u", list_v4, epg_urls)
     if list_v6:  # IPv6 源下载失败时不覆盖上次的 IPv6 列表
-        write_m3u("haosean-ipv6.m3u", list_v6)
+        write_m3u("haosean-ipv6.m3u", list_v6, epg_urls)
 
     # 生成统计表
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
@@ -290,6 +311,9 @@ def main():
         n6 = sum(1 for c in list_v6 if c["group"] == g)
         rows.append(f"| {g} | {n4} | {n6 if g != G_BACKUP else '—'} |")
     rows.append(f"| **合计** | **{len(list_v4)}** | **{len(list_v6)}** |")
+    n4 = sum(1 for c in list_v4 if c["catchup"])
+    n6 = sum(1 for c in list_v6 if c["catchup"])
+    rows.append(f"| ⏪ 支持回看 | {n4} | {n6} |")
     with open("stats.md", "w", encoding="utf-8") as f:
         f.write("\n".join(rows) + "\n")
     print("\n".join(rows))
