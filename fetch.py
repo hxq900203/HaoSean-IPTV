@@ -275,14 +275,15 @@ def main():
             for info, url in items:
                 if url in seen:
                     continue
-                # 去掉外地电视台（比如编号是 .us 结尾的美国之音）
+                # 去掉外地电视台（编号结尾不是 .cn .hk .mo .tw 的）
                 cc = attr(info, "tvg-id").split("@")[0].rsplit(".", 1)
                 if len(cc) == 2 and cc[1].lower() not in ALLOWED_COUNTRIES:
                     continue
-                if any(w.lower() in info.lower() for w in EXCLUDE):
-                    continue
                 seen.add(url)
                 raw_name = info.rsplit(",", 1)[-1].strip()
+                # 只看频道名和编号，不看台标网址（网址里的乱码可能碰巧含有这些字母）
+                if any(w.lower() in (raw_name + attr(info, "tvg-id")).lower() for w in EXCLUDE):
+                    continue
                 is_cctv = region == "大陆" and re.match(r"\s*(CCTV|CGTN|CETV|中国教育)", raw_name, re.I)
                 channels.append({
                     "name": clean_name(raw_name, attr(info, "tvg-id"), cn_names),
