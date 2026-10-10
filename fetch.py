@@ -15,7 +15,9 @@
 import ipaddress
 import json
 import re
+import shutil
 import socket
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -235,6 +237,24 @@ def probe(url):
     return len(head) > 0, max(heights, default=0)
 
 
+def video_height(url):
+    """用 ffprobe（视频工具 ffmpeg 里自带的）读出视频真实的高度，比如 1080。读不出就返回 0。
+
+    很多电视台官方的直播地址不写分辨率，只能打开视频本身看。
+    """
+    if not shutil.which("ffprobe"):
+        return 0
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-rw_timeout", "10000000", "-user_agent", USER_AGENT,
+             "-select_streams", "v:0", "-show_entries", "stream=height", "-of", "csv=p=0", url],
+            capture_output=True, text=True, timeout=25,
+        ).stdout
+        return max((int(h) for h in re.findall(r"\d+", out)), default=0)
+    except Exception:
+        return 0
+
+
 # ------------------------------------------------------------
 # 【第 4 步】排序、保存
 # ------------------------------------------------------------
@@ -340,6 +360,13 @@ def main():
     for ch, (ok, height) in zip(v4, results):
         ch["ok"] = ok
         ch["height"] = ch["height"] or height  # 频道名里没写分辨率，就用试播读到的
+
+    # 能看、但还是不知道分辨率的国内频道：打开视频本身读真实分辨率
+    unknown = [c for c in v4 if c["ok"] and not c["height"] and c["group"] != G_HMT]
+    print(f"{len(unknown)} 个能看的国内频道没写分辨率，读取视频真实分辨率…")
+    with ThreadPoolExecutor(16) as pool:
+        for ch, h in zip(unknown, pool.map(lambda c: video_height(c["url"]), unknown)):
+            ch["height"] = h
 
     def hd_enough(ch):
         """国内频道只要 1080P 以上；港澳台不限。"""

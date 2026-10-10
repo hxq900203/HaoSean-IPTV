@@ -31,6 +31,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      # 准备好 ffmpeg（用来读视频的真实分辨率）
+      - name: 安装 ffmpeg
+        run: which ffprobe || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+
       # 3. 运行抓取程序：下载频道、试播、生成播放列表
       - name: 抓取并检测
         run: python fetch.py
