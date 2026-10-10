@@ -1,0 +1,64 @@
+# ============================================================
+# 自动任务：每天更新电视直播源
+#
+# 这个文件告诉 GitHub：每天定时帮我运行一次 fetch.py，
+# 把最新的播放列表保存回仓库。全程自动，不需要你做任何事。
+# ============================================================
+
+name: 更新直播源
+
+# 什么时候运行
+on:
+  schedule:
+    - cron: "17 22 * * *" # 每天北京时间早上 6:17（GitHub 用的是国际时间，所以写的是 22:17）
+  workflow_dispatch: # 在 Actions 页面多一个“Run workflow”按钮，想立刻更新时手动点
+
+# 允许这个任务做的事
+permissions:
+  contents: write # 把新生成的播放列表保存回仓库
+  actions: write # 保活用：防止 GitHub 因为“太久没动静”把任务停掉
+
+jobs:
+  update:
+    runs-on: ubuntu-latest # 在 GitHub 提供的免费服务器上运行
+    timeout-minutes: 30 # 最多运行 30 分钟，卡住了就自动停
+    steps:
+      # 1. 把仓库里的文件拿到服务器上
+      - uses: actions/checkout@v4
+
+      # 2. 准备好 Python（运行 fetch.py 需要它）
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 3. 运行抓取程序：下载频道、试播、生成播放列表
+      - name: 抓取并检测
+        run: python fetch.py
+
+      # 4. 把新的播放列表保存回仓库（有变化才保存）
+      - name: 保存结果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add haosean.m3u all.m3u stats.md
+          git diff --cached --quiet || git commit -m "更新直播源 $(date -u +%F)"
+          git push
+
+      # 5. 让国内加速地址马上拿到新列表：
+      #    jsDelivr（国内能打开的加速地址）会缓存旧文件，这里通知它清掉缓存。
+      #    仓库是私有的时候这一步会失败，但不影响其他步骤。
+      - name: 刷新国内加速地址
+        continue-on-error: true
+        run: |
+          for f in haosean.m3u all.m3u; do
+            curl -fsS -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$f" || true
+          done
+
+      # 6. 保活：GitHub 规定仓库 60 天没动静就会停掉定时任务。
+      #    这里每次运行都“重新启用”一下自己，60 天的计时就重新开始，能一直跑下去。
+      #    就算上面某一步失败了，这一步也照样执行。
+      - name: 保活
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
