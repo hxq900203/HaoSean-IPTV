@@ -153,8 +153,6 @@ https://stream.jmtv.com.cn/xwzh/playlist.m3u8?_upt=3e28e7271664278691
 http://l.cztvcloud.com/channels/lantian/SXqujiang1/720p.m3u8?zzhed
 #EXTINF:-1 tvg-id="诸暨新闻综合" tvg-name="诸暨新闻综合" tvg-logo="https://tb.zbds.top/logo/诸暨新闻综合.png" group-title="📡 地方频道",诸暨新闻综合
 https://l.cztvcloud.com/channels/lantian/SXzhuji3/720p.m3u8
-#EXTINF:-1 tvg-id="通海电视台" tvg-name="通海电视台" tvg-logo="https://tb.zbds.top/logo/通海电视台.png" group-title="📡 地方频道",通海电视台
-https://zb-live.ynurl.com/tonghai/3bfe3a9e-48e6-4c1e-8770-1df66447cc6c.m3u8
 #EXTINF:-1 tvg-id="遂昌综合" tvg-name="遂昌综合" tvg-logo="https://tb.zbds.top/logo/遂昌综合.png" group-title="📡 地方频道",遂昌综合
 http://l.cztvcloud.com/channels/lantian/SXsuichang1/720p.m3u8?zzhed
 #EXTINF:-1 tvg-id="邯郸新闻综合" tvg-name="邯郸新闻" tvg-logo="https://tb.zbds.top/logo/邯郸新闻.png" group-title="📡 地方频道",邯郸新闻
@@ -193,6 +191,8 @@ https://mobile.ccdntech.com/transcoder/_definst_/vod164_Live/live/chunklist_w117
 http://103.172.187.30:12000/stream/mytv/null-11/master.m3u8
 #EXTINF:-1 tvg-id="Good2.tw@SD" tvg-name="好消息電視台" tvg-logo="https://i.imgur.com/YxFRoft.png" group-title="🌏 港澳台",好消息電視台
 https://live.streamingfast.net/osmflivech2.m3u8
+#EXTINF:-1 tvg-id="RTHKTV31.hk@SD" tvg-name="港台電視31" tvg-logo="https://i.imgur.com/kf818kM.png" group-title="🌏 港澳台",港台電視31
+https://rthktv31-live.akamaized.net/hls/live/2036818/RTHKTV31/master.m3u8
 #EXTINF:-1 tvg-id="MeiAhMovieChannel.hk@SD" tvg-name="美亞電影台" tvg-logo="https://i.imgur.com/laGiFM1.png" group-title="🌏 港澳台",美亞電影台
 http://103.172.187.30:12000/stream/mytv/null-9/master.m3u8
 #EXTINF:-1 tvg-id="GoldenJade.hk@SD" tvg-name="黃金翡翠台" tvg-logo="https://i.imgur.com/lPYxsUr.png" group-title="🌏 港澳台",黃金翡翠台
